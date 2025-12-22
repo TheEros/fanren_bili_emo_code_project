@@ -1,4 +1,3 @@
-\
 import regex as re
 
 RE_BRACKET_EMO = re.compile(r"\[[^\[\]]{1,12}\]")       # [doge] [笑哭]

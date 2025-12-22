@@ -240,6 +240,7 @@ def _progress_line(done: int, total: int, prefix: str = "Ollama", extra: str = "
 def _progress_print(line: str) -> None:
     sys.stdout.write("\r" + line)
     sys.stdout.flush()
+
 def predict_posnegneu_one(text: str, client: OllamaClient) -> str:
     t = (text or "").strip()
     if not t or re.fullmatch(r"[\W_]+", t, flags=re.UNICODE):
@@ -327,25 +328,4 @@ def predict_posnegneu(
 
     if progress:
         sys.stdout.write("\n")
-    return out
-
-    w = max(1, int(workers or 1))
-    if w == 1:
-        for i, t in todo:
-            lab = predict_posnegneu_one(t, client)
-            cache[t] = lab
-            out[i] = lab
-        return out
-
-    with ThreadPoolExecutor(max_workers=w) as ex:
-        futs = {ex.submit(predict_posnegneu_one, t, client): (i, t) for i, t in todo}
-        for fut in as_completed(futs):
-            i, t = futs[fut]
-            try:
-                lab = fut.result()
-            except Exception:
-                lab = "neu"
-            cache[t] = lab
-            out[i] = lab
-
     return out

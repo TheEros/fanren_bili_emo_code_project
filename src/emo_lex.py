@@ -14,17 +14,19 @@ def build_emo_index(lex_df: pd.DataFrame) -> Dict[str, str]:
 
 def predict_emotion_lex(text: str, emo_index: Dict[str, str], priority: List[str] = None) -> str:
     t = text or ""
-    hits = []
+    pr = priority or DEFAULT_PRIORITY
+    pr_rank = {emo: i for i, emo in enumerate(pr)}
+    best_emo = None
+    best_rank = len(pr) + 1
     for w, emo in emo_index.items():
         if w and w in t:
-            hits.append(emo)
-    if not hits:
-        return "other"
-    pr = priority or DEFAULT_PRIORITY
-    for p in pr:
-        if p in hits:
-            return p
-    return hits[0]
+            rank = pr_rank.get(emo, len(pr) + 1)
+            if rank < best_rank:
+                best_rank = rank
+                best_emo = emo
+                if best_rank == 0:
+                    return best_emo
+    return best_emo or "other"
 
 def combine_emo(lex_emo: str, model_emo: str = "neu") -> str:
     if lex_emo != "other":
