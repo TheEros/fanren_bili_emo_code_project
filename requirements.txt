@@ -1,0 +1,13 @@
+pandas
+numpy
+regex
+tqdm
+scipy
+scikit-learn
+matplotlib
+openpyxl
+# optional:
+# jieba
+# torch
+# transformers
+# accelerate
