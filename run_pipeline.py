@@ -1,7 +1,13 @@
 
 import argparse
 import json
+import hashlib
+import platform
+import shutil
+import sys
+from datetime import datetime
 from pathlib import Path
+
 import pandas as pd
 
 
@@ -27,6 +33,51 @@ COMMENT_KEEP = ["rpid","parent","content","like","ctime","fans_grade","level","m
 def ensure_dirs(outdir: Path):
     for sub in ["clean","labeled","tables","figs"]:
         (outdir / sub).mkdir(parents=True, exist_ok=True)
+
+def file_md5(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    h = hashlib.md5()
+    with path.open("rb") as f:
+        while True:
+            b = f.read(chunk_size)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+def write_run_artifacts(outdir: Path, args: argparse.Namespace):
+    """写出可复现元信息（不影响现有 tables 读取逻辑，只新增文件）。"""
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = Path(getattr(args, "manifest", "manifest.csv"))
+    lexicon_path = Path(getattr(args, "lexicon", "emo_lexicon.csv"))
+
+    # 快照文件（用于论文复现）
+    if manifest_path.exists():
+        shutil.copyfile(manifest_path, outdir / "manifest_snapshot.csv")
+    if lexicon_path.exists():
+        shutil.copyfile(lexicon_path, outdir / "lexicon_snapshot.csv")
+
+    args_dict = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
+    cfg = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "python": sys.version,
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+        },
+        "args": args_dict,
+        "manifest": {
+            "path": str(manifest_path),
+            "md5": file_md5(manifest_path) if manifest_path.exists() else None,
+        },
+        "lexicon": {
+            "path": str(lexicon_path),
+            "md5": file_md5(lexicon_path) if lexicon_path.exists() else None,
+        },
+    }
+    with open(outdir / "run_config.json", "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 def _add_features(df: pd.DataFrame, text_col: str) -> pd.DataFrame:
     feats = df[text_col].map(extract_features).apply(pd.Series)
@@ -181,6 +232,10 @@ def main():
     outdir = Path(args.outdir)
     ensure_dirs(outdir)
 
+    # P0：可复现元信息（快照 + run_config.json）
+    # 说明：写在 outdir 根目录，不影响现有 tables/figs 的兼容性。
+    write_run_artifacts(outdir, args)
+
     mf = read_manifest(args.manifest)
     lex_df = load_emo_lexicon(args.lexicon)
     emo_index = build_emo_index(lex_df)
@@ -197,6 +252,27 @@ def main():
 
         d = clean_danmaku(d_raw, ep)
         c = clean_comment(c_raw, ep)
+
+        # P0：清洗报告（raw/kept/dropped）
+        cleaning_rows = [
+            {
+                "episode_id": ep,
+                "dataset": "danmaku",
+                "raw_n": int(len(d_raw)),
+                "kept_n": int(len(d)),
+                "dropped_n": int(max(0, len(d_raw) - len(d))),
+                "kept_ratio": float(len(d) / max(1, len(d_raw))),
+            },
+            {
+                "episode_id": ep,
+                "dataset": "comment_all",
+                "raw_n": int(len(c_raw)),
+                "kept_n": int(len(c)),
+                "dropped_n": int(max(0, len(c_raw) - len(c))),
+                "kept_ratio": float(len(c) / max(1, len(c_raw))),
+            },
+        ]
+        pd.DataFrame(cleaning_rows).to_csv(outdir / "tables" / f"cleaning_report_ep{ep}.csv", index=False)
 
         ds = danmaku_basic_stats(d)
         cs = comment_basic_stats(c)
@@ -243,7 +319,14 @@ def main():
         # 分布与曲线与刷屏
         dist_table(d_lab, "emo").to_csv(outdir / "tables" / f"danmaku_emo_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
         dist_table(d_lab, "func").to_csv(outdir / "tables" / f"danmaku_func_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
-        dist_table(c_lab[c_lab["parent"] == 0], "emo").to_csv(outdir / "tables" / f"comment_root_emo_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
+        root = c_lab[c_lab["parent"] == 0]
+        reply = c_lab[c_lab["parent"] != 0]
+
+        # 评论：根评/回复 分布（P0新增：支持论文“根评 vs 回复”对照）
+        dist_table(root, "emo").to_csv(outdir / "tables" / f"comment_root_emo_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
+        dist_table(reply, "emo").to_csv(outdir / "tables" / f"comment_reply_emo_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
+        dist_table(root, "func").to_csv(outdir / "tables" / f"comment_root_func_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
+        dist_table(reply, "func").to_csv(outdir / "tables" / f"comment_reply_func_dist_ep{ep}.csv", index=False, encoding="utf-8-sig")
 
         # --- Ollama 极性（model_emo）与覆盖率（model_used） ---
         if "model_emo" in d_lab.columns:
@@ -254,16 +337,21 @@ def main():
             dist_table(c_lab[(c_lab["parent"] == 0) & (c_lab.get("model_used", False) == True)], "model_emo").to_csv(
                 outdir / "tables" / f"comment_root_model_emo_dist_ep{ep}.csv", index=False, encoding="utf-8-sig"
             )
+            dist_table(c_lab[(c_lab["parent"] != 0) & (c_lab.get("model_used", False) == True)], "model_emo").to_csv(
+                outdir / "tables" / f"comment_reply_model_emo_dist_ep{ep}.csv", index=False, encoding="utf-8-sig"
+            )
 
         danmu_total = int(len(d_lab))
         danmu_used = int(d_lab.get("model_used", False).sum()) if "model_used" in d_lab.columns else 0
-        root = c_lab[c_lab["parent"] == 0]
         root_total = int(len(root))
         root_used = int(root.get("model_used", False).sum()) if "model_used" in root.columns else 0
+        reply_total = int(len(reply))
+        reply_used = int(reply.get("model_used", False).sum()) if "model_used" in reply.columns else 0
 
         usage = pd.DataFrame([
             {"dataset": "danmaku", "total": danmu_total, "model_used": danmu_used, "ratio": (danmu_used / danmu_total) if danmu_total else 0.0},
             {"dataset": "comment_root", "total": root_total, "model_used": root_used, "ratio": (root_used / root_total) if root_total else 0.0},
+            {"dataset": "comment_reply", "total": reply_total, "model_used": reply_used, "ratio": (reply_used / reply_total) if reply_total else 0.0},
         ])
         usage.to_csv(outdir / "tables" / f"model_usage_ep{ep}.csv", index=False, encoding="utf-8-sig")
 

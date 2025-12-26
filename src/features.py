@@ -3,8 +3,9 @@ import regex as re
 RE_BRACKET_EMO = re.compile(r"\[[^\[\]]{1,12}\]")       # [doge] [笑哭]
 RE_REPEAT_CHAR = re.compile(r"(.)\1{2,}")               # 哈哈哈 / 啊啊啊
 RE_AT = re.compile(r"@[\p{Han}\w_-]{1,20}")             # @xxx
-RE_QM = re.compile(r"\?")
-RE_EM = re.compile(r"!")
+# 同时支持英文与全角中文标点
+RE_QM = re.compile(r"[\?？]")
+RE_EM = re.compile(r"[!！]")
 
 def extract_features(text: str) -> dict:
     t = text or ""
