@@ -1,4 +1,4 @@
-# fanren_bili_emo (v3)
+# fanren_bili_emo
 
 多集处理：弹幕/评论清洗、特征抽取(features)、情绪(emo)与功能(func)标签、刷屏检测、基础统计与高频词粗看导出。
 
