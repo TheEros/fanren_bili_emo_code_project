@@ -1,0 +1,29 @@
+{
+  "timestamp": "2025-12-31T09:53:12",
+  "python": "3.14.2 (main, Dec  9 2025, 19:03:28) [Clang 21.1.4 ]",
+  "platform": {
+    "system": "Linux",
+    "release": "6.6.114.1-microsoft-standard-WSL2",
+    "machine": "x86_64"
+  },
+  "args": {
+    "manifest": "manifest.csv",
+    "lexicon": "emo_lexicon.csv",
+    "outdir": "outputs",
+    "topk_terms": 80,
+    "use_ollama": true,
+    "ollama_model": "qwen3:8b",
+    "ollama_base_url": "http://localhost:11434",
+    "ollama_workers": 8,
+    "ollama_scope": "other",
+    "ollama_no_progress": false
+  },
+  "manifest": {
+    "path": "manifest.csv",
+    "md5": "385d8fb660254e1ca66212e64e48547c"
+  },
+  "lexicon": {
+    "path": "emo_lexicon.csv",
+    "md5": "0fc2b5fffa4e4952b9b71b775cc2d45d"
+  }
+}
