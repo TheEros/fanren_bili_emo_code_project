@@ -1,3 +1,5 @@
+bilibili 弹幕获取：https://github.com/2513502304/bilibili-danmaku
+bilibili 评论获取：https://github.com/WShihan/blblcd
 # fanren_bili_emo
 
 多集处理：弹幕/评论清洗、特征抽取(features)、情绪(emo)与功能(func)标签、刷屏检测、基础统计与高频词粗看导出。
